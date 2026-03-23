@@ -3,10 +3,12 @@
  * @author SoroMint Team
  * @notice This middleware catches all errors passed to next(error) in Express
  *         and returns standardized JSON error responses to clients.
- * @dev In development mode, full error stacks are logged to console.
+ * @dev In development mode, full error stacks are logged via Winston.
  *      In production, sensitive error details are omitted from client responses.
  *      Custom errors can be created using the AppError class for specific error codes.
  */
+
+const { logger } = require('../utils/logger');
 
 /**
  * @notice Custom error class for application-specific errors
@@ -56,28 +58,36 @@ const formatErrorResponse = (err, isProduction) => {
 };
 
 /**
- * @notice Logs error details to console (development only)
- * @dev Full stack traces are logged in development for debugging
+ * @notice Logs error details via Winston logger
+ * @dev Full error details are logged with appropriate log level
  * @param {Error} err - The error to log
  * @param {Object} req - Express request object for context
  * @param {boolean} isProduction - Whether running in production mode
  */
 const logError = (err, req, isProduction) => {
-  const logMessage = [
-    '\n❌ [ERROR]',
-    `Message: ${err.message}`,
-    `Code: ${err.code || 'INTERNAL_ERROR'}`,
-    `Status: ${err.statusCode || 500}`,
-    `Path: ${req.originalUrl}`,
-    `Method: ${req.method}`
-  ];
+  const logData = {
+    message: err.message,
+    code: err.code || 'INTERNAL_ERROR',
+    statusCode: err.statusCode || 500,
+    path: req.originalUrl,
+    method: req.method,
+    correlationId: req.correlationId,
+    isOperational: err.isOperational || false
+  };
 
-  if (!isProduction && err.stack) {
-    logMessage.push(`\nStack Trace:\n${err.stack}`);
+  // Include stack trace in log data
+  if (err.stack) {
+    logData.stack = err.stack;
   }
 
-  // eslint-disable-next-line no-console
-  console.error(logMessage.join('\n'));
+  // Log with appropriate level based on error severity
+  if (err.statusCode >= 500) {
+    logger.error('Internal Server Error', logData);
+  } else if (err.statusCode >= 400) {
+    logger.warn('Client Error', logData);
+  } else {
+    logger.info('Error', logData);
+  }
 };
 
 /**
