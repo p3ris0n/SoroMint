@@ -36,6 +36,21 @@ const tokenSchema = z.object({
 });
 
 /**
+ * @title Pagination Validation Schema
+ * @dev Validates query parameters for paginated results.
+ *      Coerces strings to numbers and sets defaults.
+ */
+const paginationSchema = z.object({
+  page: z.coerce.number().int().min(1, "Page must be at least 1").default(1),
+  limit: z.coerce
+    .number()
+    .int()
+    .min(1, "Limit must be at least 1")
+    .max(100, "Limit must not exceed 100")
+    .default(20),
+});
+
+/**
  * @notice Middleware for validating token creation requests
  * @dev Uses Zod to validate req.body and logs failures to DeploymentAudit.
  *      Expects req.user to be populated by authentication middleware.
@@ -75,7 +90,29 @@ const validateToken = async (req, res, next) => {
   }
 };
 
+/**
+ * @notice Middleware for validating pagination query parameters
+ * @dev Validates req.query and populates it with coerced defaults.
+ */
+const validatePagination = (req, res, next) => {
+  try {
+    const validatedQuery = paginationSchema.parse(req.query);
+    req.query = validatedQuery;
+    next();
+  } catch (error) {
+    if (error instanceof z.ZodError) {
+      const errorMessage = error.errors
+        .map((e) => `${e.path.join(".")}: ${e.message}`)
+        .join(", ");
+      return next(new AppError(errorMessage, 400, "VALIDATION_ERROR"));
+    }
+    next(error);
+  }
+};
+
 module.exports = {
   tokenSchema,
+  paginationSchema,
   validateToken,
+  validatePagination,
 };

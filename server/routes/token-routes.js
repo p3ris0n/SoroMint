@@ -4,7 +4,10 @@ const DeploymentAudit = require("../models/DeploymentAudit");
 const { asyncHandler, AppError } = require("../middleware/error-handler");
 const { logger } = require("../utils/logger");
 const { authenticate } = require("../middleware/auth");
-const { validateToken } = require("../validators/token-validator");
+const {
+  validateToken,
+  validatePagination,
+} = require("../validators/token-validator");
 
 const router = express.Router();
 
@@ -12,21 +15,50 @@ const router = express.Router();
  * @route GET /api/tokens/:owner
  * @group Tokens - Token management operations
  * @param {string} owner.path - Owner's Stellar public key
- * @returns {Array.<Token>} 200 - Array of tokens owned by the specified address
- * @returns {Error} 400 - Invalid owner public key format
+ * @param {number} page.query - Page number (default: 1)
+ * @param {number} limit.query - Items per page (default: 20)
+ * @returns {Object} 200 - Paginated tokens with metadata
+ * @returns {Error} 400 - Invalid parameters
  * @returns {Error} default - Unexpected error
  * @security [JWT]
  */
 router.get(
   "/tokens/:owner",
   authenticate,
+  validatePagination,
   asyncHandler(async (req, res) => {
+    const { owner } = req.params;
+    const { page, limit } = req.query;
+
     logger.info("Fetching tokens for owner", {
       correlationId: req.correlationId,
-      ownerPublicKey: req.params.owner,
+      ownerPublicKey: owner,
+      page,
+      limit,
     });
-    const tokens = await Token.find({ ownerPublicKey: req.params.owner });
-    res.json(tokens);
+
+    const skip = (page - 1) * limit;
+
+    const [tokens, totalCount] = await Promise.all([
+      Token.find({ ownerPublicKey: owner })
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Token.countDocuments({ ownerPublicKey: owner }),
+    ]);
+
+    const totalPages = Math.ceil(totalCount / limit);
+
+    res.json({
+      success: true,
+      data: tokens,
+      metadata: {
+        totalCount,
+        page,
+        totalPages,
+        limit,
+      },
+    });
   }),
 );
 

@@ -178,7 +178,7 @@ describe("Token Routes", () => {
   });
 
   describe("GET /api/tokens/:owner", () => {
-    it("should return tokens for a specific owner", async () => {
+    it("should return tokens for a specific owner with pagination metadata", async () => {
       // Seed some data
       await new Token({
         name: "Token 1",
@@ -186,6 +186,7 @@ describe("Token Routes", () => {
         decimals: 7,
         contractId: TEST_CONTRACT_ID.replace("A", "1"),
         ownerPublicKey: TEST_PUBLIC_KEY,
+        createdAt: new Date(Date.now() - 1000),
       }).save();
 
       await new Token({
@@ -194,6 +195,7 @@ describe("Token Routes", () => {
         decimals: 7,
         contractId: TEST_CONTRACT_ID.replace("A", "2"),
         ownerPublicKey: TEST_PUBLIC_KEY,
+        createdAt: new Date(),
       }).save();
 
       const response = await request(app)
@@ -201,9 +203,47 @@ describe("Token Routes", () => {
         .set("Authorization", `Bearer ${validToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body.length).toBe(2);
-      expect(response.body[0].symbol).toBe("TK1");
-      expect(response.body[1].symbol).toBe("TK2");
+      expect(response.body.success).toBe(true);
+      expect(response.body.data.length).toBe(2);
+      expect(response.body.data[0].symbol).toBe("TK2"); // Sorted newest first
+      expect(response.body.data[1].symbol).toBe("TK1");
+      expect(response.body.metadata).toEqual({
+        totalCount: 2,
+        page: 1,
+        totalPages: 1,
+        limit: 20,
+      });
+    });
+
+    it("should respect limit and page parameters", async () => {
+      // Seed 5 tokens
+      for (let i = 1; i <= 5; i++) {
+        await new Token({
+          name: `Token ${i}`,
+          symbol: `TK${i}`,
+          decimals: 7,
+          contractId: TEST_CONTRACT_ID.slice(0, -1) + i,
+          ownerPublicKey: TEST_PUBLIC_KEY,
+          createdAt: new Date(Date.now() + i * 1000),
+        }).save();
+      }
+
+      // Request page 1 with limit 2
+      const res1 = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?limit=2&page=1`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(res1.body.data.length).toBe(2);
+      expect(res1.body.data[0].symbol).toBe("TK5"); // Newest
+      expect(res1.body.metadata.totalPages).toBe(3);
+
+      // Request page 3 with limit 2
+      const res3 = await request(app)
+        .get(`/api/tokens/${TEST_PUBLIC_KEY}?limit=2&page=3`)
+        .set("Authorization", `Bearer ${validToken}`);
+
+      expect(res3.body.data.length).toBe(1);
+      expect(res3.body.data[0].symbol).toBe("TK1"); // Oldest
     });
 
     it("should return empty list if owner has no tokens", async () => {
@@ -214,7 +254,8 @@ describe("Token Routes", () => {
         .set("Authorization", `Bearer ${validToken}`);
 
       expect(response.status).toBe(200);
-      expect(response.body).toEqual([]);
+      expect(response.body.data).toEqual([]);
+      expect(response.body.metadata.totalCount).toBe(0);
     });
   });
 });
