@@ -17,6 +17,7 @@ enum DataKey {
     Decimals,
     Name,
     Symbol,
+    MetadataHash,
 }
 
 #[contract]
@@ -133,6 +134,32 @@ impl SoroMintToken {
     pub fn unpause(e: Env) {
         let admin: Address = e.storage().instance().get(&DataKey::Admin).unwrap();
         soromint_lifecycle::unpause(e, admin);
+    }
+
+    /// Sets the external metadata hash for the token.
+    ///
+    /// # Arguments
+    /// * `hash` - The IPFS or Arweave hash of the token's rich metadata.
+    ///
+    /// # Authorization
+    /// Requires the current admin to authorize the transaction.
+    ///
+    /// # Events
+    /// Emits a `metadata_updated` event with `(admin, hash)`.
+    pub fn set_metadata_hash(e: Env, hash: String) {
+        let admin: Address = e.storage().instance().get(&DataKey::Admin).expect("admin not set");
+        admin.require_auth();
+
+        e.storage().instance().set(&DataKey::MetadataHash, &hash);
+        events::emit_metadata_updated(&e, &admin, &hash);
+    }
+
+    /// Returns the external metadata hash for the token, if any.
+    ///
+    /// # Returns
+    /// An `Option<String>` containing the hash if it has been set.
+    pub fn metadata_hash(e: Env) -> Option<String> {
+        e.storage().instance().get(&DataKey::MetadataHash)
     }
 }
 

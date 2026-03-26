@@ -19,3 +19,21 @@ Returns the current health or operational status of the contract.
 - **Signature**: `status(e: Env) -> String`
 - **Returns**: A `String` representing the status (e.g., `"alive"`).
 - **Usage**: Used by monitoring dashboards to ensure the contract is responsive and not in a halted or deprecated state.
+
+## Metadata Management
+
+The token supports a link to external rich metadata stored on decentralized storage platforms.
+
+### `set_metadata_hash()`
+Sets the IPFS or Arweave hash for external metadata. Requires admin authorization.
+
+- **Signature**: `set_metadata_hash(e: Env, hash: String)`
+- **Returns**: `()` (void)
+- **Events**: Emits a `metadata_updated` event.
+
+### `metadata_hash()`
+Returns the current metadata hash if set.
+
+- **Signature**: `metadata_hash(e: Env) -> Option<String>`
+- **Returns**: `Option<String>` containing the hash or `None`.
+

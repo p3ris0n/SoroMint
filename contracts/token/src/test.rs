@@ -248,6 +248,60 @@ fn test_version_and_status() {
 }
 
 // ===========================================================================
+// Metadata Hash Tests
+// ===========================================================================
+
+#[test]
+fn test_set_and_get_metadata_hash() {
+    let e = Env::default();
+    e.mock_all_auths();
+    let admin = Address::generate(&e);
+    let token_id = e.register_contract(None, SoroMintToken);
+    let client = SoroMintTokenClient::new(&e, &token_id);
+    
+    client.initialize(
+        &admin,
+        &7,
+        &String::from_str(&e, "SoroMint"),
+        &String::from_str(&e, "SMT"),
+    );
+
+    let hash = String::from_str(&e, "QmXoypizjW3WknFiJnKLwHCnL72vedxjQkDDP1mXWo6uco");
+    client.set_metadata_hash(&hash);
+    assert_eq!(client.metadata_hash(), Some(hash.clone()));
+
+    // Verify event emission
+    let events = e.events().all();
+    let last_event = events.last().expect("expected at least one event");
+    let data: (Address, String) = last_event.2.into_val(&e);
+    assert_eq!(data.0, admin);
+    assert_eq!(data.1, hash);
+}
+
+
+
+#[test]
+#[should_panic]
+fn test_set_metadata_hash_unauthorized() {
+    let e = Env::default();
+    let admin = Address::generate(&e);
+    let user = Address::generate(&e);
+    let token_id = e.register_contract(None, SoroMintToken);
+    let client = SoroMintTokenClient::new(&e, &token_id);
+    
+    client.initialize(
+        &admin,
+        &7,
+        &String::from_str(&e, "SoroMint"),
+        &String::from_str(&e, "SMT"),
+    );
+
+    // This should fail because we are not mimicking the admin's authorization
+    client.set_metadata_hash(&String::from_str(&e, "somehash"));
+}
+
+
+// ===========================================================================
 // Property-Based Tests
 // ===========================================================================
 

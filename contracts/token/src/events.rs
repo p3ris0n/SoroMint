@@ -107,3 +107,19 @@ pub fn emit_ownership_transfer(env: &Env, prev_admin: &Address, new_admin: &Addr
     env.events()
         .publish(topics, (prev_admin.clone(), new_admin.clone()));
 }
+
+/// Emits a `metadata_updated` event when the token metadata hash is changed.
+///
+/// # Arguments
+/// * `env`   - The Soroban environment.
+/// * `admin` - The admin address authorizing the update.
+/// * `hash`  - The new metadata hash (IPFS/Arweave).
+///
+/// # Event Structure
+/// - **Topics**: `("SoroMint", "meta_hash")`
+/// - **Data**:   `(admin, hash)`
+pub fn emit_metadata_updated(env: &Env, admin: &Address, hash: &String) {
+    let topics = (symbol_short!("SoroMint"), symbol_short!("meta_hash"));
+    env.events().publish(topics, (admin.clone(), hash.clone()));
+}
+
