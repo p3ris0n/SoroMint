@@ -10,6 +10,9 @@
 /// | `initialized`        | `("SoroMint", "init")`                       | `(admin, decimal, name, symbol)`                          |
 /// | `mint`               | `("SoroMint", "mint")`                       | `(admin, to, amount, new_balance, new_supply)`            |
 /// | `burn`               | `("SoroMint", "burn")`                       | `(admin, from, amount, new_balance, new_supply)`          |
+/// | `transfer`           | `("SoroMint", "transfer")`                   | `(from, to, amount, from_balance, to_balance)`            |
+/// | `approve`            | `("SoroMint", "approve")`                    | `(from, spender, amount)`                                 |
+/// | `transfer_from`      | `("SoroMint", "xfer_from")`                  | `(spender, from, to, amount, allowance, from_balance, to_balance)` |
 /// | `ownership_transfer` | `("SoroMint", "xfer_own")`                   | `(prev_admin, new_admin)`                                 |
 ///
 /// Each function accepts the environment and the relevant parameters,
@@ -92,6 +95,61 @@ pub fn emit_burn(
     );
 }
 
+/// Emits a `transfer` event when tokens move between addresses.
+pub fn emit_transfer(
+    env: &Env,
+    from: &Address,
+    to: &Address,
+    amount: i128,
+    new_from_balance: i128,
+    new_to_balance: i128,
+) {
+    let topics = (symbol_short!("SoroMint"), symbol_short!("transfer"));
+    env.events().publish(
+        topics,
+        (
+            from.clone(),
+            to.clone(),
+            amount,
+            new_from_balance,
+            new_to_balance,
+        ),
+    );
+}
+
+/// Emits an `approve` event when an allowance is set or updated.
+pub fn emit_approve(env: &Env, from: &Address, spender: &Address, amount: i128) {
+    let topics = (symbol_short!("SoroMint"), symbol_short!("approve"));
+    env.events()
+        .publish(topics, (from.clone(), spender.clone(), amount));
+}
+
+/// Emits a `transfer_from` event when delegated allowance is used.
+pub fn emit_transfer_from(
+    env: &Env,
+    spender: &Address,
+    from: &Address,
+    to: &Address,
+    amount: i128,
+    remaining_allowance: i128,
+    new_from_balance: i128,
+    new_to_balance: i128,
+) {
+    let topics = (symbol_short!("SoroMint"), symbol_short!("xfer_from"));
+    env.events().publish(
+        topics,
+        (
+            spender.clone(),
+            from.clone(),
+            to.clone(),
+            amount,
+            remaining_allowance,
+            new_from_balance,
+            new_to_balance,
+        ),
+    );
+}
+
 /// Emits an `ownership_transfer` event when the admin role is transferred.
 ///
 /// # Arguments
@@ -107,3 +165,19 @@ pub fn emit_ownership_transfer(env: &Env, prev_admin: &Address, new_admin: &Addr
     env.events()
         .publish(topics, (prev_admin.clone(), new_admin.clone()));
 }
+
+/// Emits a `metadata_updated` event when the token metadata hash is changed.
+///
+/// # Arguments
+/// * `env`   - The Soroban environment.
+/// * `admin` - The admin address authorizing the update.
+/// * `hash`  - The new metadata hash (IPFS/Arweave).
+///
+/// # Event Structure
+/// - **Topics**: `("SoroMint", "meta_hash")`
+/// - **Data**:   `(admin, hash)`
+pub fn emit_metadata_updated(env: &Env, admin: &Address, hash: &String) {
+    let topics = (symbol_short!("SoroMint"), symbol_short!("meta_hash"));
+    env.events().publish(topics, (admin.clone(), hash.clone()));
+}
+

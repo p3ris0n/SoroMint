@@ -36,16 +36,17 @@ pub fn get_pending_owner(e: &Env) -> Option<Address> {
     e.storage().instance().get(&DataKey::PendingOwner)
 }
 
-/// Initiates the transfer of ownership to a new address.
-/// Step 1 of the handshake.
-///
-/// # Arguments
-/// * `new_owner` - The address to which ownership will be transferred.
+/// @notice Initiates the transfer of ownership to a new address.
+/// @dev Step 1 of the handshake. Optimizes gas by caching storage handles.
+/// @param new_owner The address to which ownership will be transferred.
+/// @auth Requires the current owner to authorize the transaction.
+/// @emit owner_pe(owner, new_owner)
 pub fn transfer_ownership(e: Env, new_owner: Address) {
-    let owner: Address = get_owner(&e);
+    let instance = e.storage().instance();
+    let owner: Address = instance.get(&DataKey::Owner).expect("Owner not initialized");
     owner.require_auth();
 
-    e.storage().instance().set(&DataKey::PendingOwner, &new_owner);
+    instance.set(&DataKey::PendingOwner, &new_owner);
     
     e.events().publish(
         (OWNER_PENDING, owner),
@@ -53,18 +54,18 @@ pub fn transfer_ownership(e: Env, new_owner: Address) {
     );
 }
 
-/// Accepts the transfer of ownership.
-/// Step 2 of the handshake.
-///
-/// # Panics
-/// Panics if no pending owner is set or if the caller is not the pending owner.
+/// @notice Accepts the transfer of ownership.
+/// @dev Step 2 of the handshake. Optimizes gas by caching instance storage and reducing lookups.
+/// @auth Requires the pending owner to authorize the transaction.
+/// @emit owner_tr(old_owner, pending_owner)
 pub fn accept_ownership(e: Env) {
-    let pending_owner: Address = get_pending_owner(&e).expect("No pending owner");
+    let instance = e.storage().instance();
+    let pending_owner: Address = instance.get(&DataKey::PendingOwner).expect("No pending owner");
     pending_owner.require_auth();
 
-    let old_owner: Address = get_owner(&e);
-    e.storage().instance().set(&DataKey::Owner, &pending_owner);
-    e.storage().instance().remove(&DataKey::PendingOwner);
+    let old_owner: Address = instance.get(&DataKey::Owner).expect("Owner not set");
+    instance.set(&DataKey::Owner, &pending_owner);
+    instance.remove(&DataKey::PendingOwner);
 
     e.events().publish(
         (OWNER_TRANSFERRED, old_owner),

@@ -12,7 +12,8 @@ const { MongoMemoryServer } = require('mongodb-memory-server');
 const User = require('../../models/User');
 const { generateToken, authenticate } = require('../../middleware/auth');
 const { errorHandler } = require('../../middleware/error-handler');
-const authRoutes = require('../../routes/auth-routes');
+const { createAuthRouter } = require('../../routes/auth-routes');
+const { createRateLimiter } = require('../../middleware/rate-limiter');
 
 // Test environment setup
 let mongoServer;
@@ -42,7 +43,9 @@ beforeAll(async () => {
   // Setup Express app
   app = express();
   app.use(express.json());
-  app.use('/api/auth', authRoutes);
+  app.use('/api/auth', createAuthRouter({
+    authLoginRateLimiter: createRateLimiter({ windowMs: 60_000, max: 1_000 })
+  }));
   app.use(errorHandler);
 
   // Create test user

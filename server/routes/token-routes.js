@@ -1,30 +1,32 @@
 const express = require("express");
 const Token = require("../models/Token");
 const DeploymentAudit = require("../models/DeploymentAudit");
-const { asyncHandler, AppError } = require("../middleware/error-handler");
+const { asyncHandler } = require("../middleware/error-handler");
 const { logger } = require("../utils/logger");
 const { authenticate } = require("../middleware/auth");
+const { tokenDeploymentRateLimiter } = require("../middleware/rate-limiter");
 const {
   validateToken,
   validatePagination,
   validateSearch,
 } = require("../validators/token-validator");
 
-const router = express.Router();
+const createTokenRouter = ({ deployRateLimiter = tokenDeploymentRateLimiter } = {}) => {
+  const router = express.Router();
 
-/**
- * @route GET /api/tokens/:owner
- * @group Tokens - Token management operations
- * @param {string} owner.path - Owner's Stellar public key
- * @param {number} page.query - Page number (default: 1)
- * @param {number} limit.query - Items per page (default: 20)
- * @param {string} search.query - Search query for token name or symbol (case-insensitive)
- * @returns {Object} 200 - Paginated tokens with metadata
- * @returns {Error} 400 - Invalid parameters
- * @returns {Error} default - Unexpected error
- * @security [JWT]
- */
-router.get(
+  /**
+   * @route GET /api/tokens/:owner
+   * @group Tokens - Token management operations
+   * @param {string} owner.path - Owner's Stellar public key
+   * @param {number} page.query - Page number (default: 1)
+   * @param {number} limit.query - Items per page (default: 20)
+   * @param {string} search.query - Search query for token name or symbol (case-insensitive)
+   * @returns {Object} 200 - Paginated tokens with metadata
+   * @returns {Error} 400 - Invalid parameters
+   * @returns {Error} default - Unexpected error
+   * @security [JWT]
+   */
+  router.get(
   "/tokens/:owner",
   authenticate,
   validatePagination,
@@ -42,13 +44,10 @@ router.get(
     });
 
     const skip = (page - 1) * limit;
-
-    // Build query filter
     const queryFilter = { ownerPublicKey: owner };
 
-    // Add search filter if provided
     if (search) {
-      const searchRegex = new RegExp(search, "i"); // Case-insensitive regex
+      const searchRegex = new RegExp(search, "i");
       queryFilter.$or = [
         { name: { $regex: searchRegex } },
         { symbol: { $regex: searchRegex } },
@@ -83,20 +82,21 @@ router.get(
       },
     });
   }),
-);
+  );
 
-/**
- * @route POST /api/tokens
- * @group Tokens - Token management operations
- * @param {TokenCreateInput.model} body.required - Token creation data
- * @returns {Token} 201 - Successfully created token
- * @returns {Error} 400 - Missing required fields or validation error
- * @returns {Error} 409 - Token with this contractId already exists
- * @returns {Error} default - Unexpected error
- * @security [JWT]
- */
-router.post(
+  /**
+   * @route POST /api/tokens
+   * @group Tokens - Token management operations
+   * @param {TokenCreateInput.model} body.required - Token creation data
+   * @returns {Token} 201 - Successfully created token
+   * @returns {Error} 400 - Missing required fields or validation error
+   * @returns {Error} 409 - Token with this contractId already exists
+   * @returns {Error} default - Unexpected error
+   * @security [JWT]
+   */
+  router.post(
   "/tokens",
+  deployRateLimiter,
   authenticate,
   validateToken,
   asyncHandler(async (req, res) => {
@@ -126,7 +126,6 @@ router.post(
         tokenId: newToken._id,
       });
 
-      // Log successful deployment
       await DeploymentAudit.create({
         userId,
         tokenName: name,
@@ -141,7 +140,6 @@ router.post(
         error: error.message,
       });
 
-      // Log failed deployment attempt
       await DeploymentAudit.create({
         userId,
         tokenName: name,
@@ -150,10 +148,13 @@ router.post(
         errorMessage: error.message,
       });
 
-      // Re-throw to be handled by error middleware
       throw error;
     }
   }),
-);
+  );
 
-module.exports = router;
+  return router;
+};
+
+module.exports = createTokenRouter();
+module.exports.createTokenRouter = createTokenRouter;

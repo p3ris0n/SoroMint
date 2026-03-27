@@ -3,8 +3,7 @@ const { StrKey } = require('@stellar/stellar-sdk');
 const User = require('../models/User');
 const { generateToken, authenticate } = require('../middleware/auth');
 const { asyncHandler, AppError } = require('../middleware/error-handler');
-
-const router = express.Router();
+const { loginRateLimiter } = require('../middleware/rate-limiter');
 
 /**
  * @title Authentication Routes
@@ -12,20 +11,22 @@ const router = express.Router();
  * @notice Handles user registration and login via Stellar public key authentication
  * @dev Implements a challenge/response mechanism for MVP using public key verification
  */
+const createAuthRouter = ({ authLoginRateLimiter = loginRateLimiter } = {}) => {
+  const router = express.Router();
 
-/**
- * @route POST /api/auth/register
- * @description Register a new user with their Stellar public key
- * @access Public
- *
- * @body {string} publicKey - Stellar public key (G-address)
- * @body {string} [username] - Optional username/nickname
- *
- * @returns {Object} 201 - User object and JWT token
- * @returns {Object} 400 - Validation error
- * @returns {Object} 409 - User already exists
- */
-router.post('/register', asyncHandler(async (req, res) => {
+  /**
+   * @route POST /api/auth/register
+   * @description Register a new user with their Stellar public key
+   * @access Public
+   *
+   * @body {string} publicKey - Stellar public key (G-address)
+   * @body {string} [username] - Optional username/nickname
+   *
+   * @returns {Object} 201 - User object and JWT token
+   * @returns {Object} 400 - Validation error
+   * @returns {Object} 409 - User already exists
+   */
+  router.post('/register', asyncHandler(async (req, res) => {
   const { publicKey, username } = req.body;
 
   // Validate public key is provided
@@ -82,24 +83,24 @@ router.post('/register', asyncHandler(async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN || '24h'
     }
   });
-}));
+  }));
 
-/**
- * @route POST /api/auth/login
- * @description Login with Stellar public key
- * @notice For MVP, this is a simple public key check. In production, implement challenge/response.
- * @access Public
- *
- * @body {string} publicKey - Stellar public key (G-address)
- * @body {string} [signature] - Optional signature for challenge/response (future enhancement)
- * @body {string} [challenge] - Optional challenge string (future enhancement)
- *
- * @returns {Object} 200 - User object and JWT token
- * @returns {Object} 400 - Validation error
- * @returns {Object} 401 - User not found or invalid credentials
- * @returns {Object} 403 - Account suspended/deleted
- */
-router.post('/login', asyncHandler(async (req, res) => {
+  /**
+   * @route POST /api/auth/login
+   * @description Login with Stellar public key
+   * @notice For MVP, this is a simple public key check. In production, implement challenge/response.
+   * @access Public
+   *
+   * @body {string} publicKey - Stellar public key (G-address)
+   * @body {string} [signature] - Optional signature for challenge/response (future enhancement)
+   * @body {string} [challenge] - Optional challenge string (future enhancement)
+   *
+   * @returns {Object} 200 - User object and JWT token
+   * @returns {Object} 400 - Validation error
+   * @returns {Object} 401 - User not found or invalid credentials
+   * @returns {Object} 403 - Account suspended/deleted
+   */
+  router.post('/login', authLoginRateLimiter, asyncHandler(async (req, res) => {
   const { publicKey, signature, challenge } = req.body;
 
   // Validate public key is provided
@@ -165,19 +166,19 @@ router.post('/login', asyncHandler(async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN || '24h'
     }
   });
-}));
+  }));
 
-/**
- * @route GET /api/auth/me
- * @description Get current authenticated user profile
- * @access Private (requires valid JWT)
- *
- * @header {string} Authorization - Bearer <JWT token>
- *
- * @returns {Object} 200 - User profile data
- * @returns {Object} 401 - Invalid or missing token
- */
-router.get('/me', authenticate, asyncHandler(async (req, res) => {
+  /**
+   * @route GET /api/auth/me
+   * @description Get current authenticated user profile
+   * @access Private (requires valid JWT)
+   *
+   * @header {string} Authorization - Bearer <JWT token>
+   *
+   * @returns {Object} 200 - User profile data
+   * @returns {Object} 401 - Invalid or missing token
+   */
+  router.get('/me', authenticate, asyncHandler(async (req, res) => {
   res.json({
     success: true,
     data: {
@@ -191,19 +192,19 @@ router.get('/me', authenticate, asyncHandler(async (req, res) => {
       }
     }
   });
-}));
+  }));
 
-/**
- * @route POST /api/auth/refresh
- * @description Refresh JWT token for authenticated user
- * @access Private (requires valid JWT)
- *
- * @header {string} Authorization - Bearer <JWT token>
- *
- * @returns {Object} 200 - New JWT token
- * @returns {Object} 401 - Invalid or expired token
- */
-router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
+  /**
+   * @route POST /api/auth/refresh
+   * @description Refresh JWT token for authenticated user
+   * @access Private (requires valid JWT)
+   *
+   * @header {string} Authorization - Bearer <JWT token>
+   *
+   * @returns {Object} 200 - New JWT token
+   * @returns {Object} 401 - Invalid or expired token
+   */
+  router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
   // Generate new token with same user data
   const newToken = generateToken(req.user.publicKey, req.user.username);
 
@@ -215,20 +216,20 @@ router.post('/refresh', authenticate, asyncHandler(async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN || '24h'
     }
   });
-}));
+  }));
 
-/**
- * @route PUT /api/auth/profile
- * @description Update user profile information
- * @access Private (requires valid JWT)
- *
- * @header {string} Authorization - Bearer <JWT token>
- * @body {string} [username] - New username (3-50 characters)
- *
- * @returns {Object} 200 - Updated user profile
- * @returns {Object} 400 - Validation error
- */
-router.put('/profile', authenticate, asyncHandler(async (req, res) => {
+  /**
+   * @route PUT /api/auth/profile
+   * @description Update user profile information
+   * @access Private (requires valid JWT)
+   *
+   * @header {string} Authorization - Bearer <JWT token>
+   * @body {string} [username] - New username (3-50 characters)
+   *
+   * @returns {Object} 200 - Updated user profile
+   * @returns {Object} 400 - Validation error
+   */
+  router.put('/profile', authenticate, asyncHandler(async (req, res) => {
   const { username } = req.body;
 
   // Validate username if provided
@@ -254,6 +255,10 @@ router.put('/profile', authenticate, asyncHandler(async (req, res) => {
       }
     }
   });
-}));
+  }));
 
-module.exports = router;
+  return router;
+};
+
+module.exports = createAuthRouter();
+module.exports.createAuthRouter = createAuthRouter;

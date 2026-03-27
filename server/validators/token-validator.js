@@ -3,11 +3,6 @@ const { AppError } = require("../middleware/error-handler");
 const { logger } = require("../utils/logger");
 const DeploymentAudit = require("../models/DeploymentAudit");
 
-/**
- * @title Token Validation Schema
- * @dev Validates the request body for token creation.
- *      Enforces naming conventions and Soroban/Stellar address formats.
- */
 const tokenSchema = z.object({
   name: z
     .string()
@@ -35,11 +30,6 @@ const tokenSchema = z.object({
     .startsWith("G", "Owner Public Key must start with G"),
 });
 
-/**
- * @title Pagination Validation Schema
- * @dev Validates query parameters for paginated results.
- *      Coerces strings to numbers and sets defaults.
- */
 const paginationSchema = z.object({
   page: z.coerce.number().int().min(1, "Page must be at least 1").default(1),
   limit: z.coerce
@@ -50,36 +40,23 @@ const paginationSchema = z.object({
     .default(20),
 });
 
-/**
- * @title Search Validation Schema
- * @dev Validates search query parameters.
- *      Allows optional search string with length constraints.
- */
 const searchSchema = z.object({
   search: z
     .string()
     .min(1, "Search query must be at least 1 character")
     .max(50, "Search query must not exceed 50 characters")
     .optional()
-    .or(z.literal("")
-      .transform(() => undefined)), // Convert empty string to undefined
+    .or(z.literal("").transform(() => undefined)),
 });
 
-/**
- * @notice Middleware for validating token creation requests
- * @dev Uses Zod to validate req.body and logs failures to DeploymentAudit.
- *      Expects req.user to be populated by authentication middleware.
- */
 const validateToken = async (req, res, next) => {
   try {
-    // Validate and transform the request body
-    const validatedData = tokenSchema.parse(req.body);
-    req.body = validatedData;
+    req.body = tokenSchema.parse(req.body);
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
       const errorMessage = error.errors
-        .map((e) => `${e.path.join(".")}: ${e.message}`)
+        .map((entry) => `${entry.path.join(".")}: ${entry.message}`)
         .join(", ");
 
       logger.warn("Token validation failed", {
@@ -87,12 +64,9 @@ const validateToken = async (req, res, next) => {
         errors: error.errors,
       });
 
-      // Log failed attempt due to validation
-      const userId = req.user ? req.user._id : null;
-
-      if (userId) {
+      if (req.user?._id) {
         await DeploymentAudit.create({
-          userId,
+          userId: req.user._id,
           tokenName: req.body.name || "Unknown",
           status: "FAIL",
           errorMessage: `Validation Error: ${errorMessage}`,
@@ -101,49 +75,42 @@ const validateToken = async (req, res, next) => {
 
       return next(new AppError(errorMessage, 400, "VALIDATION_ERROR"));
     }
-    next(error);
+
+    return next(error);
   }
 };
 
-/**
- * @notice Middleware for validating pagination query parameters
- * @dev Validates req.query and populates it with coerced defaults.
- */
 const validatePagination = (req, res, next) => {
   try {
-    const validatedQuery = paginationSchema.parse(req.query);
-    req.query = { ...req.query, ...validatedQuery };
+    req.query = { ...req.query, ...paginationSchema.parse(req.query) };
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
       const errorMessage = error.errors
-        .map((e) => `${e.path.join(".")}: ${e.message}`)
+        .map((entry) => `${entry.path.join(".")}: ${entry.message}`)
         .join(", ");
+
       return next(new AppError(errorMessage, 400, "VALIDATION_ERROR"));
     }
-    next(error);
+
+    return next(error);
   }
 };
 
-/**
- * @notice Middleware for validating search query parameters
- * @dev Validates req.query.search and sanitizes the input.
- *      Supports case-insensitive partial matching on token name and symbol.
- */
 const validateSearch = (req, res, next) => {
   try {
-    const validatedQuery = searchSchema.parse(req.query);
-    // Merge validated search with existing query params
-    req.query = { ...req.query, ...validatedQuery };
+    req.query = { ...req.query, ...searchSchema.parse(req.query) };
     next();
   } catch (error) {
     if (error instanceof z.ZodError) {
       const errorMessage = error.errors
-        .map((e) => `${e.path.join(".")}: ${e.message}`)
+        .map((entry) => `${entry.path.join(".")}: ${entry.message}`)
         .join(", ");
+
       return next(new AppError(errorMessage, 400, "VALIDATION_ERROR"));
     }
-    next(error);
+
+    return next(error);
   }
 };
 
